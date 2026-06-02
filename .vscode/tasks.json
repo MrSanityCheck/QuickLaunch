@@ -1,0 +1,39 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Lint: Analyse all scripts",
+            "type": "shell",
+            "command": "Invoke-ScriptAnalyzer -Path . -Settings .vscode\\PSScriptAnalyzerSettings.psd1 -Recurse",
+            "options": {
+                "shell": {
+                    "executable": "pwsh.exe",
+                    "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"]
+                }
+            },
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Build: Compile QuickLaunch.exe",
+            "type": "shell",
+            "command": ".\\build\\Compile-Launcher.ps1",
+            "options": {
+                "shell": {
+                    "executable": "pwsh.exe",
+                    "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+                }
+            },
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

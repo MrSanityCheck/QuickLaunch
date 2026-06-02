@@ -1,0 +1,8 @@
+# Enforce CRLF line endings for all text files on Windows
+* text=auto eol=crlf
+
+# Binary files — no line ending conversion
+*.ico binary
+*.exe binary
+*.dll binary
+*.png binary

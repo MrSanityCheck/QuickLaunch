@@ -1,0 +1,29 @@
+# Compiled output
+*.exe
+*.dll
+*.pdb
+
+# Build artifacts
+Launcher.cs
+
+# Logs
+Logs/
+*.log
+
+# OS artefacts
+Thumbs.db
+Desktop.ini
+[Dd]esktop.ini
+
+# VS Code — keep settings and task definitions, ignore personal workspace state
+.vscode/*
+!.vscode/PSScriptAnalyzerSettings.psd1
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+# Claude Code — keep shared project settings, ignore local personal overrides
+.claude/*
+!.claude/settings.json
+
+# Workspace file
+*.code-workspace
