@@ -1,30 +1,33 @@
 param(
-    [switch]$Major
+    [switch]$Major,
+    [switch]$Patch
 )
 
 $ErrorActionPreference = 'Stop'
 
-# Read latest tag from the remote so we don't depend on a full local fetch
 $latest = git describe --tags --abbrev=0 2>$null
 if (-not $latest) { $latest = "v0.0.0" }
 
-if ($latest -notmatch '^v?(\d+)\.(\d+)\.\d+$') {
+if ($latest -notmatch '^v?(\d+)\.(\d+)\.(\d+)$') {
     throw "Could not parse latest tag: $latest"
 }
 
 [int]$maj = $Matches[1]
 [int]$min = $Matches[2]
+[int]$pat = $Matches[3]
 
 if ($Major) {
-    $maj++
-    $min = 0
-    Write-Host "Major bump: $latest -> v$maj.$min.0" -ForegroundColor Yellow
+    $maj++; $min = 0; $pat = 0
+    Write-Host "Major bump: $latest -> v$maj.$min.$pat" -ForegroundColor Yellow
+} elseif ($Patch) {
+    $pat++
+    Write-Host "Patch bump: $latest -> v$maj.$min.$pat" -ForegroundColor Cyan
 } else {
-    $min++
-    Write-Host "Minor bump: $latest -> v$maj.$min.0" -ForegroundColor Cyan
+    $min++; $pat = 0
+    Write-Host "Minor bump: $latest -> v$maj.$min.$pat" -ForegroundColor Cyan
 }
 
-$newTag = "v$maj.$min.0"
+$newTag = "v$maj.$min.$pat"
 
 git tag $newTag
 git push origin $newTag
