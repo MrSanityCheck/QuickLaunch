@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -52,9 +53,20 @@ public static class ShortcutService
     {
         try
         {
+            // Resolve .lnk targets so SHGetFileInfo sees the actual file —
+            // calling it on the .lnk itself always adds the shortcut overlay
+            // and bypasses Office IconHandlers (causing blank document icons).
+            var iconPath = path;
+            if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+            {
+                var target = ResolveTarget(path);
+                if (!string.IsNullOrEmpty(target) && File.Exists(target))
+                    iconPath = target;
+            }
+
             var info = new SHFILEINFO();
             var result = NativeMethods.SHGetFileInfo(
-                path, 0, ref info,
+                iconPath, 0, ref info,
                 (uint)Marshal.SizeOf<SHFILEINFO>(),
                 NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON);
 
@@ -88,5 +100,22 @@ public static class ShortcutService
             logger?.Log($"Failed to extract icon for {path}: {ex.Message}");
             return null;
         }
+    }
+
+    private static string ResolveTarget(string lnkPath)
+    {
+        try
+        {
+            var shellType = Type.GetTypeFromProgID("WScript.Shell", throwOnError: false);
+            if (shellType == null) return "";
+            var shell = Activator.CreateInstance(shellType);
+            if (shell == null) return "";
+            var shortcut = shellType.InvokeMember(
+                "CreateShortcut", BindingFlags.InvokeMethod, null, shell, [lnkPath]);
+            if (shortcut == null) return "";
+            return shortcut.GetType().InvokeMember(
+                "TargetPath", BindingFlags.GetProperty, null, shortcut, null) as string ?? "";
+        }
+        catch { return ""; }
     }
 }
