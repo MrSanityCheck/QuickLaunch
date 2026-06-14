@@ -19,6 +19,26 @@
             "problemMatcher": []
         },
         {
+            "label": "Build: dotnet build",
+            "type": "shell",
+            "command": "Stop-Process -Name QuickLaunch -ErrorAction SilentlyContinue; dotnet build src\\QuickLaunch.csproj",
+            "options": {
+                "shell": {
+                    "executable": "pwsh.exe",
+                    "args": ["-NoProfile", "-Command"]
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared"
+            },
+            "problemMatcher": "$msCompile"
+        },
+        {
             "label": "Build: Compile QuickLaunch.exe",
             "type": "shell",
             "command": ".\\build\\Compile-Launcher.ps1",
