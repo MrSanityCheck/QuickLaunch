@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO;
-using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
@@ -52,30 +52,35 @@ public static class ShortcutService
     {
         try
         {
-            var sourcePath = path;
-            if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
-            {
-                var target = ResolveTarget(path);
-                if (!string.IsNullOrEmpty(target) && File.Exists(target))
-                    sourcePath = target;
-            }
+            var info = new SHFILEINFO();
+            var result = NativeMethods.SHGetFileInfo(
+                path, 0, ref info,
+                (uint)Marshal.SizeOf<SHFILEINFO>(),
+                NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON);
 
-            using var icon = System.Drawing.Icon.ExtractAssociatedIcon(sourcePath);
-            if (icon == null) return null;
+            if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero) return null;
 
-            using var bitmap = icon.ToBitmap();
-            var hBitmap = bitmap.GetHbitmap();
             try
             {
-                var source = Imaging.CreateBitmapSourceFromHBitmap(
-                    hBitmap, IntPtr.Zero, Int32Rect.Empty,
-                    BitmapSizeOptions.FromEmptyOptions());
-                source.Freeze(); // required for cache — BitmapSource must be frozen to cross thread boundaries
-                return source;
+                using var icon   = System.Drawing.Icon.FromHandle(info.hIcon);
+                using var bitmap = icon.ToBitmap();
+                var hBitmap = bitmap.GetHbitmap();
+                try
+                {
+                    var source = Imaging.CreateBitmapSourceFromHBitmap(
+                        hBitmap, IntPtr.Zero, Int32Rect.Empty,
+                        BitmapSizeOptions.FromEmptyOptions());
+                    source.Freeze();
+                    return source;
+                }
+                finally
+                {
+                    NativeMethods.DeleteObject(hBitmap);
+                }
             }
             finally
             {
-                NativeMethods.DeleteObject(hBitmap);
+                NativeMethods.DestroyIcon(info.hIcon);
             }
         }
         catch (Exception ex)
@@ -83,22 +88,5 @@ public static class ShortcutService
             logger?.Log($"Failed to extract icon for {path}: {ex.Message}");
             return null;
         }
-    }
-
-    private static string ResolveTarget(string lnkPath)
-    {
-        try
-        {
-            var shellType = Type.GetTypeFromProgID("WScript.Shell", throwOnError: false);
-            if (shellType == null) return "";
-            var shell = Activator.CreateInstance(shellType);
-            if (shell == null) return "";
-            var shortcut = shellType.InvokeMember(
-                "CreateShortcut", BindingFlags.InvokeMethod, null, shell, [lnkPath]);
-            if (shortcut == null) return "";
-            return shortcut.GetType().InvokeMember(
-                "TargetPath", BindingFlags.GetProperty, null, shortcut, null) as string ?? "";
-        }
-        catch { return ""; }
     }
 }
