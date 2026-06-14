@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.IO;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -53,55 +52,42 @@ public static class ShortcutService
     {
         try
         {
-            // Resolve .lnk targets: SHGetFileInfo on the .lnk itself always adds
-            // the shortcut overlay and misses Office IconHandlers (blank doc icons).
-            var iconPath = path;
-            uint dwAttr  = 0;
-            uint flags   = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON;
+            if (!path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+                return IconFromPath(path, 0, NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON);
 
-            if (path.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+            var link = (IShellLinkW)new ShellLinkCoClass();
+            ((IPersistFile)link).Load(path, 0);
+
+            // Try file-system path first
+            var sb = new System.Text.StringBuilder(260);
+            link.GetPath(sb, 260, IntPtr.Zero, 0);
+            var target = sb.ToString();
+
+            if (!string.IsNullOrEmpty(target))
             {
-                var target = ResolveTarget(path, logger);
-                if (!string.IsNullOrEmpty(target))
-                {
-                    iconPath = target;
-                    if (!File.Exists(target))
-                    {
-                        // Target not on disk — use extension-based icon without hitting the FS
-                        dwAttr = NativeMethods.FILE_ATTRIBUTE_NORMAL;
-                        flags |= NativeMethods.SHGFI_USEFILEATTRIBUTES;
-                    }
-                }
+                bool exists = File.Exists(target);
+                logger?.Log($"Icon [{Path.GetFileName(path)}]: path=\"{target}\" exists={exists}");
+                uint flags = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON;
+                uint attr  = 0;
+                if (!exists) { flags |= NativeMethods.SHGFI_USEFILEATTRIBUTES; attr = NativeMethods.FILE_ATTRIBUTE_NORMAL; }
+                return IconFromPath(target, attr, flags);
             }
 
-            var info   = new SHFILEINFO();
-            var result = NativeMethods.SHGetFileInfo(iconPath, dwAttr, ref info,
-                             (uint)Marshal.SizeOf<SHFILEINFO>(), flags);
-
-            if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero) return null;
-
-            try
+            // No file-system path — use the target PIDL directly.
+            // Works for network shares, virtual folders, and cloud items.
+            link.GetIDList(out var pidl);
+            if (pidl != IntPtr.Zero)
             {
-                using var icon   = System.Drawing.Icon.FromHandle(info.hIcon);
-                using var bitmap = icon.ToBitmap();
-                var hBitmap = bitmap.GetHbitmap();
                 try
                 {
-                    var source = Imaging.CreateBitmapSourceFromHBitmap(
-                        hBitmap, IntPtr.Zero, Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions());
-                    source.Freeze();
-                    return source;
+                    logger?.Log($"Icon [{Path.GetFileName(path)}]: no path, resolving via PIDL");
+                    return IconFromPidl(pidl);
                 }
-                finally
-                {
-                    NativeMethods.DeleteObject(hBitmap);
-                }
+                finally { Marshal.FreeCoTaskMem(pidl); }
             }
-            finally
-            {
-                NativeMethods.DestroyIcon(info.hIcon);
-            }
+
+            logger?.Log($"Icon [{Path.GetFileName(path)}]: no path and no PIDL — skipping");
+            return null;
         }
         catch (Exception ex)
         {
@@ -110,39 +96,40 @@ public static class ShortcutService
         }
     }
 
-    private static string ResolveTarget(string lnkPath, Logger? logger)
+    private static BitmapSource? IconFromPath(string path, uint dwAttr, uint flags)
     {
-        // Try IShellLink first — handles more shortcut types than WScript.Shell
-        try
-        {
-            var link = (IShellLinkW)new ShellLinkCoClass();
-            ((IPersistFile)link).Load(lnkPath, 0);
-            var sb = new System.Text.StringBuilder(260);
-            link.GetPath(sb, 260, IntPtr.Zero, 0);
-            var target = sb.ToString();
-            if (!string.IsNullOrEmpty(target))
-            {
-                logger?.Log($"Icon [{Path.GetFileName(lnkPath)}]: IShellLink -> \"{target}\" exists={File.Exists(target)}");
-                return target;
-            }
-        }
-        catch { }
+        var info   = new SHFILEINFO();
+        var result = NativeMethods.SHGetFileInfo(path, dwAttr, ref info,
+                         (uint)Marshal.SizeOf<SHFILEINFO>(), flags);
+        if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero) return null;
+        try   { return BitmapSourceFromHIcon(info.hIcon); }
+        finally { NativeMethods.DestroyIcon(info.hIcon); }
+    }
 
-        // Fallback: WScript.Shell
+    private static BitmapSource? IconFromPidl(IntPtr pidl)
+    {
+        var info   = new SHFILEINFO();
+        var result = NativeMethods.SHGetFileInfo(pidl, 0, ref info,
+                         (uint)Marshal.SizeOf<SHFILEINFO>(),
+                         NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON | NativeMethods.SHGFI_PIDL);
+        if (result == IntPtr.Zero || info.hIcon == IntPtr.Zero) return null;
+        try   { return BitmapSourceFromHIcon(info.hIcon); }
+        finally { NativeMethods.DestroyIcon(info.hIcon); }
+    }
+
+    private static BitmapSource BitmapSourceFromHIcon(IntPtr hIcon)
+    {
+        using var icon   = System.Drawing.Icon.FromHandle(hIcon);
+        using var bitmap = icon.ToBitmap();
+        var hBitmap = bitmap.GetHbitmap();
         try
         {
-            var shellType = Type.GetTypeFromProgID("WScript.Shell", throwOnError: false);
-            if (shellType == null) return "";
-            var shell = Activator.CreateInstance(shellType);
-            if (shell == null) return "";
-            var shortcut = shellType.InvokeMember(
-                "CreateShortcut", BindingFlags.InvokeMethod, null, shell, [lnkPath]);
-            if (shortcut == null) return "";
-            var target = shortcut.GetType().InvokeMember(
-                "TargetPath", BindingFlags.GetProperty, null, shortcut, null) as string ?? "";
-            logger?.Log($"Icon [{Path.GetFileName(lnkPath)}]: WScript.Shell -> \"{target}\" exists={File.Exists(target)}");
-            return target;
+            var source = Imaging.CreateBitmapSourceFromHBitmap(
+                hBitmap, IntPtr.Zero, Int32Rect.Empty,
+                BitmapSizeOptions.FromEmptyOptions());
+            source.Freeze();
+            return source;
         }
-        catch { return ""; }
+        finally { NativeMethods.DeleteObject(hBitmap); }
     }
 }

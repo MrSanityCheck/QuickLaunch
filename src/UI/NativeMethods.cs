@@ -59,10 +59,17 @@ internal static class NativeMethods
         string pszPath, uint dwFileAttributes,
         ref SHFILEINFO psfi, uint cbSizeFileInfo, uint uFlags);
 
-    internal const uint SHGFI_ICON             = 0x100;
-    internal const uint SHGFI_LARGEICON        = 0x000;
+    // Overload for PIDL-based lookup (SHGFI_PIDL) — works for network/virtual targets
+    [DllImport("shell32.dll")]
+    internal static extern IntPtr SHGetFileInfo(
+        IntPtr pidl, uint dwFileAttributes,
+        ref SHFILEINFO psfi, uint cbSizeFileInfo, uint uFlags);
+
+    internal const uint SHGFI_ICON              = 0x100;
+    internal const uint SHGFI_LARGEICON         = 0x000;
     internal const uint SHGFI_USEFILEATTRIBUTES = 0x010;
-    internal const uint FILE_ATTRIBUTE_NORMAL  = 0x080;
+    internal const uint SHGFI_PIDL              = 0x008;
+    internal const uint FILE_ATTRIBUTE_NORMAL   = 0x080;
 
     internal const int WCA_ACCENT_POLICY               = 19;
     internal const int ACCENT_ENABLE_ACRYLICBLURBEHIND = 4;
@@ -83,6 +90,7 @@ internal interface IShellLinkW
 {
     void GetPath([MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pszFile,
                  int cch, IntPtr pfd, uint fFlags);
+    void GetIDList(out IntPtr ppidl);
 }
 
 [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid("0000010B-0000-0000-C000-000000000046")]
