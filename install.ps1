@@ -29,5 +29,6 @@ $shortcut.WorkingDirectory = $installDir
 $shortcut.Save()
 
 Write-Host ""
-Write-Host "Done. QuickLaunch will start automatically on next login." -ForegroundColor Green
-Write-Host "To launch now: & '$installDir\QuickLaunch.exe'" -ForegroundColor Green
+Write-Host "Done. Launching QuickLaunch..." -ForegroundColor Green
+Start-Process "$installDir\QuickLaunch.exe"
+Write-Host "QuickLaunch will also start automatically on next login." -ForegroundColor Green
