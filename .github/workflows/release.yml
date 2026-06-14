@@ -22,11 +22,13 @@ jobs:
 
       - name: Publish
         run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
           dotnet publish src/QuickLaunch.csproj `
             -c Release `
             --nologo `
             -r win-x64 `
             --self-contained true `
+            -p:Version=$version `
             -o publish/QuickLaunch
 
       - name: Zip

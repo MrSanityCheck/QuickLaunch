@@ -9,6 +9,7 @@
     <RootNamespace>QuickLaunch</RootNamespace>
     <AssemblyName>QuickLaunch</AssemblyName>
     <ApplicationIcon>..\icons\icon.ico</ApplicationIcon>
+    <Version>0.0.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <OutputPath>..\bin\</OutputPath>
