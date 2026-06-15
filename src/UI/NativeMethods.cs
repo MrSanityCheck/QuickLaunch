@@ -65,6 +65,11 @@ internal static class NativeMethods
         IntPtr pidl, uint dwFileAttributes,
         ref SHFILEINFO psfi, uint cbSizeFileInfo, uint uFlags);
 
+    // Resolves a PIDL to its file-system path — handles OneDrive namespace PIDLs
+    [DllImport("shell32.dll", CharSet = CharSet.Auto)]
+    internal static extern bool SHGetPathFromIDList(
+        IntPtr pidl, [MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder pszPath);
+
     internal const uint SHGFI_ICON              = 0x100;
     internal const uint SHGFI_LARGEICON         = 0x000;
     internal const uint SHGFI_USEFILEATTRIBUTES = 0x010;

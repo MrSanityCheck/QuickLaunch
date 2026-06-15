@@ -74,14 +74,14 @@ public static class ShortcutService
             }
 
             // No file-system path — use the target PIDL directly.
-            // Works for network shares, virtual folders, and cloud items.
+            // Works for network shares, virtual folders, and OneDrive items.
             link.GetIDList(out var pidl);
             if (pidl != IntPtr.Zero)
             {
                 try
                 {
                     logger?.Log($"Icon [{Path.GetFileName(path)}]: no path, resolving via PIDL");
-                    return IconFromPidl(pidl);
+                    return IconFromPidl(pidl, logger);
                 }
                 finally { Marshal.FreeCoTaskMem(pidl); }
             }
@@ -106,8 +106,24 @@ public static class ShortcutService
         finally { NativeMethods.DestroyIcon(info.hIcon); }
     }
 
-    private static BitmapSource? IconFromPidl(IntPtr pidl)
+    private static BitmapSource? IconFromPidl(IntPtr pidl, Logger? logger = null)
     {
+        // SHGetPathFromIDList resolves OneDrive namespace PIDLs to their local sync path.
+        // Once we have a plain file path, SHGetFileInfo works normally via IconHandler.
+        var sb = new System.Text.StringBuilder(260);
+        if (NativeMethods.SHGetPathFromIDList(pidl, sb) && sb.Length > 0)
+        {
+            var fsPath = sb.ToString();
+            logger?.Log($"Icon: PIDL resolved to \"{fsPath}\"");
+            bool exists = File.Exists(fsPath);
+            uint flags  = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_LARGEICON;
+            uint attr   = 0;
+            if (!exists) { flags |= NativeMethods.SHGFI_USEFILEATTRIBUTES; attr = NativeMethods.FILE_ATTRIBUTE_NORMAL; }
+            return IconFromPath(fsPath, attr, flags);
+        }
+
+        // Fallback: ask the shell for the icon using the PIDL directly
+        logger?.Log("Icon: SHGetPathFromIDList failed, trying SHGFI_PIDL");
         var info   = new SHFILEINFO();
         var result = NativeMethods.SHGetFileInfo(pidl, 0, ref info,
                          (uint)Marshal.SizeOf<SHFILEINFO>(),
